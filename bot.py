@@ -2,6 +2,7 @@ import os
 import requests
 import json
 from bs4 import BeautifulSoup
+send("✅ Бот успішно запустився")
 
 TG_TOKEN = os.environ["TG_TOKEN"]
 TG_CHAT = os.environ["TG_CHAT"]
