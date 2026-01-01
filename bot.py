@@ -38,8 +38,8 @@ for url in urls:
         price_value = int(digits) if digits else 0
 
         ok = (
-            ("11" in title and price_value <= 300) or
-            ("13" in title and price_value <= 950)
+            ("11" in title and price_value <= 3000) or
+            ("13" in title and price_value <= 9500)
         )
 
         if ok and link not in seen:
