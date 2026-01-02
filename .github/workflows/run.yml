@@ -10,11 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: data.json
+          key: iphone-seen-cache
+
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
+
       - run: pip install -r requirements.txt
+
       - run: python bot.py
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
+
+      - name: Save cache
+        uses: actions/cache@v3
+        with:
+          path: data.json
+          key: iphone-seen-cache
