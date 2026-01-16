@@ -8,33 +8,33 @@ import time
 TG_TOKEN = os.environ["TG_TOKEN"]
 TG_CHAT = os.environ["TG_CHAT"]
 
+# Список URL для пошуку на OLX і Allegro
 URLS = [
     "https://www.olx.pl/elektronika/telefony/q-iphone-11/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-12-pro/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-13/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-14/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-15/",
+    "https://allegro.pl/listing?string=iphone%2011",
+    "https://allegro.pl/listing?string=iphone%2012%20pro",
+    "https://allegro.pl/listing?string=iphone%2013",
+    "https://allegro.pl/listing?string=iphone%2014",
+    "https://allegro.pl/listing?string=iphone%2015"
 ]
 
 MAX_PRICE = {
-    # 11 — вся Польща
     "iphone 11 pro max": 300,
     "iphone 11 pro": 300,
     "iphone 11": 300,
-
-    # інші — тільки Варшава
     "iphone 12 pro max": 950,
     "iphone 12 pro": 950,
-
     "iphone 13 pro max": 950,
     "iphone 13 pro": 950,
     "iphone 13": 950,
-
     "iphone 14 pro max": 950,
     "iphone 14 pro": 950,
     "iphone 14 plus": 950,
     "iphone 14": 950,
-
     "iphone 15 pro max": 950,
     "iphone 15 pro": 950,
     "iphone 15 plus": 950,
@@ -63,7 +63,7 @@ def price_to_int(text):
     return int(digits) if digits else 0
 
 def get_city_from_ad(url):
-    """Беремо РЕАЛЬНЕ місто зсередини оголошення"""
+    """Отримуємо місто з самого оголошення (OLX або Allegro)"""
     try:
         html = requests.get(url, headers=headers, timeout=20).text
         soup = BeautifulSoup(html, "html.parser")
@@ -89,7 +89,7 @@ for url in URLS:
         "html.parser"
     )
 
-    for item in soup.select("a[href*='/d/oferta/']"):
+    for item in soup.select("a[href*='/d/oferta/'], a[href*='/listing']"):
         title = item.get_text(" ", strip=True)
         title_l = title.lower()
 
@@ -107,7 +107,7 @@ for url in URLS:
         if not link:
             continue
         if not link.startswith("http"):
-            link = "https://www.olx.pl" + link
+            link = "https://www.olx.pl" + link if "olx" in url else "https://allegro.pl" + link
 
         if link in seen:
             continue
@@ -127,10 +127,10 @@ for url in URLS:
         if price_val <= 0 or price_val > MAX_PRICE[matched]:
             continue
 
-        # 📍 ПЕРЕВІРКА МІСТА ВСЕРЕДИНІ ОГОЛОШЕННЯ
+        # 📍 Перевірка міста всередині оголошення
         if not matched.startswith("iphone 11"):
             city = get_city_from_ad(link)
-            time.sleep(1)  # щоб OLX не злився
+            time.sleep(1)  # для запобігання блокування
             if city != "warszawa":
                 continue
 
