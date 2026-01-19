@@ -8,33 +8,33 @@ import time
 TG_TOKEN = os.environ["TG_TOKEN"]
 TG_CHAT = os.environ["TG_CHAT"]
 
-# Список URL для пошуку на OLX і Allegro
 URLS = [
     "https://www.olx.pl/elektronika/telefony/q-iphone-11/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-12-pro/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-13/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-14/",
     "https://www.olx.pl/elektronika/telefony/q-iphone-15/",
-    "https://allegro.pl/listing?string=iphone%2011",
-    "https://allegro.pl/listing?string=iphone%2012%20pro",
-    "https://allegro.pl/listing?string=iphone%2013",
-    "https://allegro.pl/listing?string=iphone%2014",
-    "https://allegro.pl/listing?string=iphone%2015"
 ]
 
 MAX_PRICE = {
+    # iPhone 11
     "iphone 11 pro max": 300,
     "iphone 11 pro": 300,
     "iphone 11": 300,
+
+    # усі інші
     "iphone 12 pro max": 950,
     "iphone 12 pro": 950,
+
     "iphone 13 pro max": 950,
     "iphone 13 pro": 950,
     "iphone 13": 950,
+
     "iphone 14 pro max": 950,
     "iphone 14 pro": 950,
     "iphone 14 plus": 950,
     "iphone 14": 950,
+
     "iphone 15 pro max": 950,
     "iphone 15 pro": 950,
     "iphone 15 plus": 950,
@@ -62,18 +62,17 @@ def price_to_int(text):
     digits = "".join(c for c in text if c.isdigit())
     return int(digits) if digits else 0
 
-def get_city_from_ad(url):
-    """Отримуємо місто з самого оголошення (OLX або Allegro)"""
+def is_warszawa(ad_url):
+    """Перевіряємо МІСТО всередині оголошення"""
     try:
-        html = requests.get(url, headers=headers, timeout=20).text
+        html = requests.get(ad_url, headers=headers, timeout=30).text
         soup = BeautifulSoup(html, "html.parser")
         for span in soup.select("span"):
-            txt = span.get_text(strip=True).lower()
-            if "warszawa" in txt:
-                return "warszawa"
-        return ""
+            if "warszawa" in span.get_text(strip=True).lower():
+                return True
+        return False
     except:
-        return ""
+        return False
 
 # ---------- load seen ----------
 try:
@@ -85,63 +84,66 @@ headers = {"User-Agent": "Mozilla/5.0"}
 
 for url in URLS:
     soup = BeautifulSoup(
-        requests.get(url, headers=headers, timeout=25).text,
+        requests.get(url, headers=headers, timeout=40).text,
         "html.parser"
     )
 
-    for item in soup.select("a[href*='/d/oferta/'], a[href*='/listing']"):
-        title = item.get_text(" ", strip=True)
-        title_l = title.lower()
+    for item in soup.select("a[href*='/d/oferta/']"):
+        try:
+            title = item.get_text(" ", strip=True)
+            title_l = title.lower()
 
-        # ❌ mini та базовий 12
-        if "mini" in title_l:
-            continue
-        if "iphone 12" in title_l and "pro" not in title_l:
-            continue
-
-        # ❌ аксесуари
-        if any(w in title_l for w in BLOCKED_WORDS):
-            continue
-
-        link = item.get("href")
-        if not link:
-            continue
-        if not link.startswith("http"):
-            link = "https://www.olx.pl" + link if "olx" in url else "https://allegro.pl" + link
-
-        if link in seen:
-            continue
-
-        price_tag = item.find_next("p")
-        price_text = price_tag.get_text(strip=True) if price_tag else ""
-        price_val = price_to_int(price_text)
-
-        matched = None
-        for key in sorted(MAX_PRICE.keys(), key=len, reverse=True):
-            if key in title_l:
-                matched = key
-                break
-
-        if not matched:
-            continue
-        if price_val <= 0 or price_val > MAX_PRICE[matched]:
-            continue
-
-        # 📍 Перевірка міста всередині оголошення
-        if not matched.startswith("iphone 11"):
-            city = get_city_from_ad(link)
-            time.sleep(1)  # для запобігання блокування
-            if city != "warszawa":
+            # ❌ mini та базовий 12
+            if "mini" in title_l:
+                continue
+            if "iphone 12" in title_l and "pro" not in title_l:
                 continue
 
-        send(
-            f"📱 {title}\n"
-            f"💰 {price_text}\n"
-            f"📍 Warszawa\n"
-            f"🔗 {link}"
-        )
+            # ❌ аксесуари
+            if any(w in title_l for w in BLOCKED_WORDS):
+                continue
 
-        seen.add(link)
+            link = item.get("href")
+            if not link:
+                continue
+            if not link.startswith("http"):
+                link = "https://www.olx.pl" + link
+
+            if link in seen:
+                continue
+
+            price_tag = item.find_next("p")
+            price_text = price_tag.get_text(strip=True) if price_tag else ""
+            price_val = price_to_int(price_text)
+
+            matched = None
+            for key in sorted(MAX_PRICE.keys(), key=len, reverse=True):
+                if key in title_l:
+                    matched = key
+                    break
+
+            if not matched:
+                continue
+            if price_val <= 0 or price_val > MAX_PRICE[matched]:
+                continue
+
+            # 📍 ВСІ — тільки Варшава
+            if not is_warszawa(link):
+                continue
+
+            time.sleep(1)
+
+            send(
+                f"📱 {title}\n"
+                f"💰 {price_text}\n"
+                f"📍 Warszawa\n"
+                f"🔗 {link}"
+            )
+
+            seen.add(link)
+
+        except Exception:
+            continue
 
 # ---------- save ----------
 DATA_FILE.write_text(
