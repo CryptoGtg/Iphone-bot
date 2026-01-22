@@ -1,109 +1,75 @@
 import os
 import requests
 import json
+import time
 from bs4 import BeautifulSoup
 from pathlib import Path
-import time
+
+# ================= CONFIG =================
 
 TG_TOKEN = os.environ["TG_TOKEN"]
 TG_CHAT = os.environ["TG_CHAT"]
+ALLEGRO_TOKEN = os.environ["ALLEGRO_TOKEN"]
 
-URLS = [
-    "https://www.olx.pl/elektronika/telefony/q-iphone-11/",
-    "https://www.olx.pl/elektronika/telefony/q-iphone-12-pro/",
-    "https://www.olx.pl/elektronika/telefony/q-iphone-13/",
-    "https://www.olx.pl/elektronika/telefony/q-iphone-14/",
-    "https://www.olx.pl/elektronika/telefony/q-iphone-15/",
-]
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-MAX_PRICE = {
-    # iPhone 11
-    "iphone 11 pro max": 300,
-    "iphone 11 pro": 300,
-    "iphone 11": 300,
-
-    # усі інші
-    "iphone 12 pro max": 950,
-    "iphone 12 pro": 950,
-
-    "iphone 13 pro max": 950,
-    "iphone 13 pro": 950,
-    "iphone 13": 950,
-
-    "iphone 14 pro max": 950,
-    "iphone 14 pro": 950,
-    "iphone 14 plus": 950,
-    "iphone 14": 950,
-
-    "iphone 15 pro max": 950,
-    "iphone 15 pro": 950,
-    "iphone 15 plus": 950,
-    "iphone 15": 950,
+ALLEGRO_HEADERS = {
+    "Authorization": f"Bearer {ALLEGRO_TOKEN}",
+    "Accept": "application/vnd.allegro.public.v1+json"
 }
-
-BLOCKED_WORDS = [
-    "case", "cover", "szkło", "szklo", "etui",
-    "futerał", "futeral", "glass", "hartowane",
-    "pokrowiec", "obudowa", "ładowarka",
-    "kabel", "charger", "cable"
-]
 
 DATA_FILE = Path("data.json")
 
-def send(text):
-    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+# ================= HELPERS =================
+
+def send(msg):
     requests.post(
-        url,
-        data={"chat_id": TG_CHAT, "text": text, "disable_web_page_preview": True},
+        f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+        data={"chat_id": TG_CHAT, "text": msg, "disable_web_page_preview": True},
         timeout=20
     )
 
-def price_to_int(text):
-    digits = "".join(c for c in text if c.isdigit())
-    return int(digits) if digits else 0
+def price_int(txt):
+    return int("".join(c for c in txt if c.isdigit())) if txt else 0
 
-def is_warszawa(ad_url):
-    """Перевіряємо МІСТО всередині оголошення"""
+def is_warszawa_olx(url):
     try:
-        html = requests.get(ad_url, headers=headers, timeout=30).text
-        soup = BeautifulSoup(html, "html.parser")
-        for span in soup.select("span"):
-            if "warszawa" in span.get_text(strip=True).lower():
-                return True
-        return False
+        html = requests.get(url, headers=HEADERS, timeout=30).text.lower()
+        return "warszawa" in html
     except:
         return False
 
-# ---------- load seen ----------
+# ================= LOAD SEEN =================
+
 try:
-    seen = set(json.loads(DATA_FILE.read_text(encoding="utf-8")).get("seen", []))
+    seen = set(json.loads(DATA_FILE.read_text()).get("seen", []))
 except:
     seen = set()
 
-headers = {"User-Agent": "Mozilla/5.0"}
+# ================= OLX =================
 
-for url in URLS:
+OLX_URLS = [
+    "https://www.olx.pl/elektronika/telefony/q-iphone-11/"
+]
+
+for url in OLX_URLS:
     soup = BeautifulSoup(
-        requests.get(url, headers=headers, timeout=40).text,
+        requests.get(url, headers=HEADERS, timeout=40).text,
         "html.parser"
     )
 
-    for item in soup.select("a[href*='/d/oferta/']"):
+    for a in soup.select("a[href*='/d/oferta/']"):
         try:
-            title = item.get_text(" ", strip=True)
-            title_l = title.lower()
+            title = a.get_text(" ", strip=True).lower()
 
-            # ❌ mini та базовий 12
-            if "mini" in title_l:
+            if "mini" in title:
                 continue
-            if "iphone 12" in title_l and "pro" not in title_l:
+            if "iphone 11" not in title:
                 continue
-
-            # ❌ аксесуари
-            if any(w in title_l for w in BLOCKED_WORDS):
+            if any(x in title for x in ["case", "etui", "szkło", "glass"]):
                 continue
 
-            link = item.get("href")
+            link = a.get("href")
             if not link:
                 continue
             if not link.startswith("http"):
@@ -112,41 +78,97 @@ for url in URLS:
             if link in seen:
                 continue
 
-            price_tag = item.find_next("p")
-            price_text = price_tag.get_text(strip=True) if price_tag else ""
-            price_val = price_to_int(price_text)
+            price_tag = a.find_next("p")
+            price = price_int(price_tag.get_text() if price_tag else "")
 
-            matched = None
-            for key in sorted(MAX_PRICE.keys(), key=len, reverse=True):
-                if key in title_l:
-                    matched = key
-                    break
-
-            if not matched:
-                continue
-            if price_val <= 0 or price_val > MAX_PRICE[matched]:
+            if price == 0 or price > 300:
                 continue
 
-            # 📍 ВСІ — тільки Варшава
-            if not is_warszawa(link):
+            if not is_warszawa_olx(link):
                 continue
-
-            time.sleep(1)
 
             send(
-                f"📱 {title}\n"
-                f"💰 {price_text}\n"
+                f"🔵 OLX\n"
+                f"📱 {a.get_text(strip=True)}\n"
+                f"💰 {price} zł\n"
+                f"📍 Warszawa\n"
+                f"🔗 {link}"
+            )
+
+            seen.add(link)
+            time.sleep(1)
+
+        except:
+            continue
+
+# ================= ALLEGRO =================
+
+ALLEGRO_QUERIES = [
+    "iphone 11",
+    "iphone 12 pro",
+    "iphone 13",
+    "iphone 14",
+    "iphone 15"
+]
+
+for q in ALLEGRO_QUERIES:
+    params = {
+        "phrase": q,
+        "limit": 20,
+        "sort": "-startTime"
+    }
+
+    r = requests.get(
+        "https://api.allegro.pl/offers/listing",
+        headers=ALLEGRO_HEADERS,
+        params=params,
+        timeout=30
+    )
+
+    if r.status_code != 200:
+        continue
+
+    items = r.json().get("items", {}).get("regular", [])
+
+    for it in items:
+        try:
+            title = it["name"].lower()
+
+            if "mini" in title:
+                continue
+            if any(x in title for x in ["case", "etui", "szkło", "glass"]):
+                continue
+
+            price = float(it["sellingMode"]["price"]["amount"])
+
+            if "iphone 11" in title:
+                if price > 300:
+                    continue
+            else:
+                if price > 950:
+                    continue
+
+            city = it.get("location", {}).get("city", "").lower()
+            if city != "warszawa":
+                continue
+
+            link = f"https://allegro.pl/oferta/{it['id']}"
+            if link in seen:
+                continue
+
+            send(
+                f"🟠 ALLEGRO\n"
+                f"📱 {it['name']}\n"
+                f"💰 {price} zł\n"
                 f"📍 Warszawa\n"
                 f"🔗 {link}"
             )
 
             seen.add(link)
 
-        except Exception:
+        except:
             continue
 
-# ---------- save ----------
-DATA_FILE.write_text(
-    json.dumps({"seen": list(seen)}, ensure_ascii=False),
-    encoding="utf-8"
-)
+# ================= SAVE =================
+
+DATA_FILE.write_text(json.dumps({"seen": list(seen)}, ensure_ascii=False))
