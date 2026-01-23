@@ -22,10 +22,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run bot
-        env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT }}
-        run: python bot.py
+  env:
+    TG_TOKEN: ${{ secrets.TG_TOKEN }}
+    TG_CHAT: ${{ secrets.TG_CHAT }}
+    ALLEGRO_CLIENT_ID: ${{ secrets.ALLEGRO_CLIENT_ID }}
+    ALLEGRO_CLIENT_SECRET: ${{ secrets.ALLEGRO_CLIENT_SECRET }}
+    ALLEGRO_REFRESH_TOKEN: ${{ secrets.ALLEGRO_REFRESH_TOKEN }}
+  run: python bot.py
 
       - name: Commit updated data.json
         run: |
