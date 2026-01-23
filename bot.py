@@ -47,10 +47,7 @@ def is_phone(title: str):
     title = title.lower()
     if "iphone 11" not in title:
         return False
-    for w in BAD_WORDS:
-        if w in title:
-            return False
-    return True
+    return not any(w in title for w in BAD_WORDS)
 
 
 # ================= OLX =================
@@ -61,7 +58,7 @@ def run_olx():
         "&search[city_id]=26131"
     )
     soup = BeautifulSoup(
-        requests.get(url, headers=HEADERS).text,
+        requests.get(url, headers=HEADERS, timeout=30).text,
         "html.parser"
     )
 
@@ -81,12 +78,10 @@ def run_olx():
         if link in seen:
             continue
 
-        price = price_el.text.strip()
         seen.add(link)
-
         send(
             f"📱 {title}\n"
-            f"💰 {price}\n"
+            f"💰 {price_el.text.strip()}\n"
             f"📍 Warszawa\n"
             f"🔗 {link}"
         )
@@ -103,12 +98,17 @@ def allegro_token():
         },
         timeout=30
     )
-    r.raise_for_status()
+    if r.status_code != 200:
+        print("⚠️ Allegro token error:", r.text)
+        return None
     return r.json()["access_token"]
 
 
 def run_allegro():
     token = allegro_token()
+    if not token:
+        return  # ❗ НЕ падаємо
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.allegro.public.v1+json"
@@ -135,12 +135,10 @@ def run_allegro():
         if link in seen:
             continue
 
-        price = item["sellingMode"]["price"]["amount"]
         seen.add(link)
-
         send(
             f"🟠 {title}\n"
-            f"💰 {price} zł\n"
+            f"💰 {item['sellingMode']['price']['amount']} zł\n"
             f"🔗 {link}"
         )
 
